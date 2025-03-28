@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: frontend
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: {{ .Values.global.repoURL }}
+    targetRevision: {{ .Values.global.targetRevision }}
+    path: charts/frontend
+    helm:
+      values: |
+        image:
+          repository: {{ .Values.global.repositories.frontend }}
+          tag: latest
+        
+        global:
+          domain: {{ .Values.global.domain }}
+        
+        ingress:
+          enabled: true
+          annotations:
+            external-dns.alpha.kubernetes.io/hostname: {{ .Values.global.domain }},www.{{ .Values.global.domain }}
+          hosts:
+            - host: {{ .Values.global.domain }}
+              paths:
+                - path: /
+                  pathType: Prefix
+            - host: www.{{ .Values.global.domain }}
+              paths:
+                - path: /
+                  pathType: Prefix
+        
+        backendService:
+          externalUrl: "https://api.{{ .Values.global.domain }}"
+          internalUrl: "http://backend.backend.svc.cluster.local:8080"
+        
+        # 데이터베이스 연결 정보 추가 (백엔드와 동일한 DB 사용)
+        database:
+          host: {{ .Values.global.database.host }}
+          port: {{ .Values.global.database.port }}
+          name: {{ .Values.global.database.name }}
+          username: {{ .Values.global.database.username }}
+          password: {{ .Values.global.database.password }}
+          # Prisma/Blitz 형식의 연결 문자열 생성
+          connectionString: "mysql://{{ .Values.global.database.username }}:{{ .Values.global.database.password }}@{{ .Values.global.database.host }}:{{ .Values.global.database.port }}/{{ .Values.global.database.name }}"
+        
+        environment: {{ .Values.global.environment }}
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: frontend
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

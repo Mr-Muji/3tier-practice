@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backend
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: {{ .Values.global.repoURL }}
+    targetRevision: {{ .Values.global.targetRevision }}
+    path: charts/backend
+    helm:
+      values: |
+        image:
+          # Jenkins에서 ECR로 푸시한 이미지 주소 사용
+          repository: {{ .Values.global.repositories.backend }}
+          tag: latest
+        
+        # 환경 변수만 오버라이드
+        environment: {{ .Values.global.environment }}
+        
+        # 인그레스 호스트 오버라이드
+        ingress:
+          enabled: true
+          annotations:
+            external-dns.alpha.kubernetes.io/hostname: api.{{ .Values.global.domain }}
+          hosts:
+            - host: api.{{ .Values.global.domain }}
+              paths:
+                - path: /
+                  pathType: Prefix
+        
+        # 데이터베이스 연결 정보 추가
+        database:
+          host: {{ .Values.global.database.host }}
+          port: {{ .Values.global.database.port }}
+          name: {{ .Values.global.database.name }}
+          username: {{ .Values.global.database.username }}
+          # 보안을 위해 시크릿으로 저장할 예정
+          password: {{ .Values.global.database.password }}
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backend
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

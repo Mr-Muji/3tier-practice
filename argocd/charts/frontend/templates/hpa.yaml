@@ -1,0 +1,67 @@
+{{- if .Values.autoscaling.enabled }}
+# values.yaml에서 autoscaling.enabled가 true인 경우에만 이 HPA 리소스를 생성합니다.
+# 이 조건문을 통해 HPA를 필요에 따라 활성화/비활성화할 수 있습니다.
+
+apiVersion: autoscaling/v2
+# Kubernetes autoscaling/v2 API 버전을 사용합니다.
+# v2 버전은 여러 메트릭(CPU, 메모리 등)을 기반으로 스케일링 가능합니다.
+
+kind: HorizontalPodAutoscaler
+# 이 리소스가 HorizontalPodAutoscaler 타입임을 명시합니다.
+# HPA는 워크로드의 CPU/메모리 사용량을 모니터링하여 Pod 수를 자동으로 조절합니다.
+
+metadata:
+  name: frontend
+  # HPA의 이름을 'frontend'로 지정합니다.
+  
+  labels:
+    app: frontend
+    env: {{ .Values.environment }}
+    # 리소스에 레이블을 추가합니다. 환경(dev, prod 등)은 values.yaml에서 가져옵니다.
+    # 이 레이블은 리소스 관리 및 필터링에 유용합니다.
+
+spec:
+  scaleTargetRef:
+    # 어떤 리소스를 스케일링할지 지정합니다.
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend
+    # frontend Deployment를 스케일링 대상으로 지정합니다.
+
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  # 최소 Pod 복제본 수를 지정합니다(values.yaml에서 값을 가져옴).
+  # 트래픽이 적더라도 이 개수 이하로 Pod 수가 줄지 않습니다.
+  
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  # 최대 Pod 복제본 수를 지정합니다(values.yaml에서 값을 가져옴).
+  # 부하가 심하더라도 이 개수 이상으로 Pod 수가 늘지 않습니다.
+
+  metrics:
+  # 스케일링 결정을 위해 모니터링할 메트릭을 정의합니다.
+  
+  {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+  # CPU 사용률 메트릭이 values.yaml에 정의되어 있다면 이 메트릭을 추가합니다.
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        # 'Utilization'은 요청된 리소스 대비 사용량의 백분율을 의미합니다.
+        averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+        # CPU 사용률이 이 값을 초과하면 Pod를 스케일 아웃(증가)하고,
+        # 이 값보다 현저히 낮으면 Pod를 스케일 인(감소)합니다.
+  {{- end }}
+  
+  {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+  # 메모리 사용률 메트릭이 values.yaml에 정의되어 있다면 이 메트릭을 추가합니다.
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+        # 메모리 사용률이 이 값을 초과하면 Pod를 스케일 아웃하고,
+        # 이 값보다 현저히 낮으면 Pod를 스케일 인합니다.
+  {{- end }}
+{{- end }}
+# HPA 리소스 정의의 끝과 조건문의 끝을 표시합니다. 

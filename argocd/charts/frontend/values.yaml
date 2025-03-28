@@ -1,0 +1,68 @@
+# 프론트엔드 어플리케이션 설정
+image:
+  repository: 183631327456.dkr.ecr.ap-northeast-2.amazonaws.com/tier3-frontend
+  tag: latest
+  pullPolicy: Always
+
+replicaCount: 1
+
+# HPA 설정 추가
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    # External DNS 어노테이션 수정
+    external-dns.alpha.kubernetes.io/hostname: mydairy.my,www.mydairy.my
+    # external-dns.alpha.kubernetes.io/hostname: "{{ .Values.ingress.host }}, www.{{ .Values.ingress.host }}"
+  hosts:
+    - host: mydairy.my
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: www.mydairy.my
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+environment: dev
+
+# 백엔드 서비스 연결 설정
+backendService:
+  # 외부 접근용 URL (브라우저에서 사용)
+  externalUrl: "https://api.mydairy.my"
+  # 내부 접근용 URL (서버 사이드 렌더링 또는 내부 통신)
+  internalUrl: "http://backend.backend.svc.cluster.local:8080"
+
+# Blitz.js를 위한 데이터베이스 연결 설정 추가
+database:
+  host: ""  # 기본값, 실제로는 ArgoCD에서 오버라이드됨
+  port: 3306        # 기본값, MySQL/MariaDB 기본 포트
+  name: ""   # 기본값
+  username: ""  # 기본값
+  password: ""      # 기본값, 실제로는 ArgoCD에서 오버라이드됨
+  
+  # DB 연결 설정
+  connectionString: ""  # DATABASE_URL 형식으로 구성됨 (Prisma/Blitz 형식)
+  poolSize: 10

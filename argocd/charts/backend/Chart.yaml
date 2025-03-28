@@ -1,0 +1,6 @@
+apiVersion: v2
+name: backend
+description: 3-tier 애플리케이션의 백엔드 컴포넌트
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

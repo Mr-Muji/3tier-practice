@@ -1,0 +1,22 @@
+# 전역 설정값
+global:
+  # 환경 설정
+  environment: dev
+  domain: mydairy.my
+  
+  # Git 저장소 정보
+  repoURL: https://github.com/Mr-Muji/3tier-manifest.git
+  targetRevision: main
+  
+  # 이미지 저장소 정보 (Terraform에서 자동으로 채워짐)
+  repositories:
+    frontend: ""  # terraform에서 자동으로 채워짐
+    backend: ""   # terraform에서 자동으로 채워짐
+  
+  # DB 연결 정보 (테라폼에서 값이 오버라이드됨)
+  database:
+    host: ""      # 테라폼에서 설정
+    port: 3306    # 테라폼에서 설정
+    name: ""      # 테라폼에서 설정
+    username: ""  # 테라폼에서 설정
+    password: ""  # 테라폼에서 설정

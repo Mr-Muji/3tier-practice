@@ -1,0 +1,73 @@
+name: 프론트엔드 이미지 빌드 및 ECR 배포
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**' # 프론트엔드 코드가 변경될 때만 실행
+env:
+  AWS_REGION: ap-northeast-2 # AWS 리전을 서울로 지정
+  ECR_REPOSITORY: tier3-frontend # ECR 리포지토리 이름
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 리포지토리 체크아웃
+        uses: actions/checkout@v4
+      - name: Node.js 설정
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16' # 프로젝트에 맞는 Node.js 버전 선택
+      - name: AWS 인증 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: ECR 로그인
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: 프론트엔드 종속성 설치
+        working-directory: ./client
+        run: npm install
+      - name: 프론트엔드 빌드
+        working-directory: ./client
+        run: npm run build:prod
+      - name: Nginx 설정 파일 생성
+        working-directory: ./client
+        run: "cat > nginx.conf << 'EOL'\nserver {\n  listen 80;\n  server_name localhost;\n  \n  location / {\n    root /usr/share/nginx/html;\n    index index.html;\n    try_files $uri $uri/ /index.html;\n  }\n  \n  # API 요청 프록시 설정 (필요한 경우)\n  location /petclinic/ {\n    proxy_pass http://backend-service:8080/petclinic/;\n    proxy_set_header Host $host;\n    proxy_set_header X-Real-IP $remote_addr;\n  }\n}\nEOL\n"
+      - name: 현재 시간 가져오기
+        id: current-time
+        run: echo "::set-output name=timestamp::$(date +'%Y%m%d%H%M%S')"
+      - name: 이미지 빌드 및 ECR 푸시
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          TIMESTAMP_TAG: ${{ steps.current-time.outputs.timestamp }}
+        run: |
+          cd ./client
+          # 이미지 빌드
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                      -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+                      -t $ECR_REGISTRY/$ECR_REPOSITORY:$TIMESTAMP_TAG \
+                      -f ../Dockerfile.frontend .
+
+          # ECR로 이미지 푸시
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$TIMESTAMP_TAG
+
+          # 출력 설정
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+      # ArgoCD 매니페스트 업데이트
+      - name: Git 설정
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "github-actions@github.com"
+      - name: ArgoCD 매니페스트 업데이트
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: petclinic-frontend
+          IMAGE_TAG: ${{ github.sha }}
+          TIMESTAMP_TAG: ${{ steps.current-time.outputs.timestamp }}
+        run: "# values.yaml 파일 업데이트 (이미지 태그만)\nsed -i \"s|tag:.*|tag: $IMAGE_TAG|g\" argocd/charts/frontend/values.yaml\nsed -i \"s|repository:.*|repository: $ECR_REGISTRY/$ECR_REPOSITORY|g\" argocd/charts/frontend/values.yaml\n\n# 변경사항 커밋 및 푸시\ngit add argocd/charts/frontend/values.yaml\ngit commit -m \"프론트엔드 이미지 업데이트: $IMAGE_TAG\"\ngit push "

@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+    env: {{ .Values.environment }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+      annotations:
+        # 이 주석이 변경될 때마다 Pod가 재시작됩니다
+        kubectl.kubernetes.io/restartedAt: {{ now | quote }}
+    spec:
+      containers:
+        - name: backend
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            # CORS 설정 추가
+            - name: CORS_ALLOWED_ORIGINS
+              value: "https://mydairy.my,https://www.mydairy.my,http://mydairy.my,http://www.mydairy.my"
+            
+            # 데이터베이스 연결 환경 변수 추가
+            # DB 호스트 설정 - 로그를 보면 이 값이 제대로 설정되지 않은 것 같습니다
+            - name: SPRING_DATASOURCE_URL  # Spring Boot 기준
+              value: "jdbc:mysql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}?useSSL=false"
+            
+            # 개별 속성으로도 제공 (백엔드 애플리케이션이 이 형식을 사용할 수 있음)
+            - name: SPRING_DATASOURCE_HOST
+              value: {{ .Values.database.host | quote }}
+            - name: SPRING_DATASOURCE_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: SPRING_DATASOURCE_DATABASE
+              value: {{ .Values.database.name | quote }}
+            
+            # 다른 일반적인 데이터베이스 환경 변수 이름
+            - name: DB_HOST
+              value: {{ .Values.database.host | quote }}
+            - name: DB_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: DB_URL
+              value: "jdbc:mysql://{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}?useSSL=false"
+            
+            # 보안을 위해 Secret에서 가져온 인증 정보 사용 (선택 사항)
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-db-credentials
+                  key: DB_PASSWORD
+            
+            # 또는 직접 값 사용 (덜 안전함)
+            # - name: SPRING_DATASOURCE_USERNAME
+            #   value: {{ .Values.database.username | quote }}
+            # - name: SPRING_DATASOURCE_PASSWORD
+            #   value: {{ .Values.database.password | quote }}
+            
+            # DB 연결 풀 설정
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "{{ .Values.database.connectionPoolSize }}"
+            - name: SPRING_DATASOURCE_HIKARI_MAX_LIFETIME
+              value: "{{ .Values.database.maxLifetime }}"
+            - name: SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT
+              value: "{{ .Values.database.maxIdleTime }}"

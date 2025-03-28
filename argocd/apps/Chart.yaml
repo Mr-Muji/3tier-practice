@@ -1,0 +1,6 @@
+apiVersion: v2
+name: apps
+description: 3-tier 애플리케이션 App of Apps 구성
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

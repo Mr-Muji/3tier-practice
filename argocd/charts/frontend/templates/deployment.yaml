@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+    env: {{ .Values.environment }}
+spec:
+  revisionHistoryLimit: 3  # 최대 3개의 레플리카셋만 유지
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+      annotations:
+        # 이 주석이 변경될 때마다 Pod가 재시작됩니다
+        kubectl.kubernetes.io/restartedAt: {{ now | quote }}
+    spec:
+      initContainers:
+        - name: prisma-migrate
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Prisma 마이그레이션 시작..."
+              # 스키마 파일 위치 확인 (db/schema.prisma 먼저 확인)
+              if [ -f "./db/schema.prisma" ]; then
+                SCHEMA_PATH="./db/schema.prisma"
+                echo "스키마 파일 경로: $SCHEMA_PATH"
+              elif [ -f "./prisma/schema.prisma" ]; then
+                SCHEMA_PATH="./prisma/schema.prisma"
+                echo "스키마 파일 경로: $SCHEMA_PATH"
+              else
+                echo "오류: prisma 스키마 파일을 찾을 수 없습니다."
+                find / -name "schema.prisma" 2>/dev/null || echo "schema.prisma 파일이 없습니다."
+                # 일단 진행
+                echo "마이그레이션 건너뛰고 계속 진행합니다"
+                exit 0
+              fi
+              
+              # 마이그레이션 실행 (오류 시도 계속 진행)
+              npx prisma migrate deploy --schema=$SCHEMA_PATH || { echo "마이그레이션 실패했지만 계속 진행합니다"; exit 0; }
+              echo "Prisma 마이그레이션 완료!"
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.database.connectionString | default (printf "mysql://%s:%s@%s:%d/%s" .Values.database.username .Values.database.password .Values.database.host (int .Values.database.port) .Values.database.name) | quote }}
+      containers:
+        - name: frontend
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # 환경 변수 추가 - 내부 통신용 백엔드 URL
+          env:
+            # 브라우저에서 사용할 백엔드 URL (외부 접근용)
+            - name: REACT_APP_API_URL
+              value: {{ .Values.backendService.externalUrl | default (printf "https://api.%s" .Values.global.domain) | quote }}
+            # 서버 사이드 렌더링이나 내부 통신용 백엔드 URL (내부 접근용)
+            - name: BACKEND_SERVICE_URL
+              value: {{ .Values.backendService.internalUrl | quote }}
+            
+            # Blitz.js를 위한 데이터베이스 환경 변수 추가
+            # DATABASE_URL 형식으로 연결 문자열 생성 (Prisma/Blitz 방식)
+            - name: DATABASE_URL
+              value: {{ .Values.database.connectionString | default (printf "mysql://%s:%s@%s:%d/%s" .Values.database.username .Values.database.password .Values.database.host (int .Values.database.port) .Values.database.name) | quote }}
+            
+            # Prisma ORM을 위한 환경 변수
+            - name: PRISMA_LOG_QUERIES
+              value: "1"
+            - name: PRISMA_CLIENT_ENGINE_TYPE
+              value: "binary"
+            - name: PRISMA_GENERATE_DATAPROXY
+              value: "false"
+            - name: PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK
+              value: "true"
+            
+            # 개별 DB 연결 정보
+            - name: DB_HOST
+              value: {{ .Values.database.host | quote }}
+            - name: DB_PORT
+              value: {{ .Values.database.port | quote }}
+            - name: DB_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: frontend-db-credentials
+                  key: DB_USERNAME
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: frontend-db-credentials
+                  key: DB_PASSWORD
+            
+            # Blitz.js 특정 환경 변수
+            - name: BLITZ_ENV
+              value: {{ .Values.environment | quote }}
+            # Prisma 디버깅 및 모니터링 설정
+            - name: PRISMA_QUERY_ENGINE_LIBRARY
+              value: "query-engine"
+            - name: NODE_ENV
+              value: {{ if eq .Values.environment "dev" }}development{{ else }}production{{ end }}

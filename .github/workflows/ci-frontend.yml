@@ -28,8 +28,8 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       - name: 프론트엔드 종속성 설치
         working-directory: ./client
-        # run: npm install --legacy-peer-deps
-        run: npm install --save-dev @types/jest
+        run: npm install --legacy-peer-deps
+        # run: npm install --save-dev @types/jest
       - name: 프론트엔드 빌드
         working-directory: ./client
         run: npm run build:prod

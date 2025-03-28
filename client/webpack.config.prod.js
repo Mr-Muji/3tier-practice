@@ -4,7 +4,9 @@ const webpack = require('webpack');
 const port = process.env.PORT || 3000;
 
 const entries = [
-  './src/main.tsx'
+  './src/main.tsx',
+  './src/index.tsx',
+  './src/app.tsx'
 ];
 
 

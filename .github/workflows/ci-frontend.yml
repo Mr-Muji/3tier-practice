@@ -37,6 +37,15 @@ jobs:
             npm install --save-dev babel-loader@6.4.1 ts-loader@0.8.2 css-loader@0.23.1 style-loader@0.13.1 file-loader@0.9.0 url-loader@0.5.7 --legacy-peer-deps
             npm install --save-dev less-loader@2.2.3 --legacy-peer-deps  # webpack 1.x와 호환되는 버전
             npm list webpack babel-loader ts-loader less-loader # 버전 확인용 
+      - name: 디버깅 - 파일 확인
+        working-directory: ./client
+        run: |
+          echo "==== 디렉토리 구조 확인 ===="
+          ls -la
+          echo "==== src 디렉토리 확인 ===="
+          ls -la ./src || echo "src 디렉토리가 없습니다"
+          echo "==== src/main.tsx 파일 확인 ===="
+          ls -la ./src/main.tsx 2>/dev/null || echo "main.tsx 파일이 없습니다"
       - name: 프론트엔드 빌드
         working-directory: ./client
         run: npm run build:prod --legacy-peer-deps

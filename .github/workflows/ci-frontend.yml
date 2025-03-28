@@ -28,7 +28,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       - name: 프론트엔드 종속성 설치
         working-directory: ./client
-        run: npm install
+        run: npm install --legacy-peer-deps
       - name: 프론트엔드 빌드
         working-directory: ./client
         run: npm run build:prod
@@ -67,7 +67,17 @@ jobs:
       - name: ArgoCD 매니페스트 업데이트
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: petclinic-frontend
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
-          TIMESTAMP_TAG: ${{ steps.current-time.outputs.timestamp }}
-        run: "# values.yaml 파일 업데이트 (이미지 태그만)\nsed -i \"s|tag:.*|tag: $IMAGE_TAG|g\" argocd/charts/frontend/values.yaml\nsed -i \"s|repository:.*|repository: $ECR_REGISTRY/$ECR_REPOSITORY|g\" argocd/charts/frontend/values.yaml\n\n# 변경사항 커밋 및 푸시\ngit add argocd/charts/frontend/values.yaml\ngit commit -m \"프론트엔드 이미지 업데이트: $IMAGE_TAG\"\ngit push "
+        run: |
+          # 최신 변경사항 가져오기
+          git pull --rebase
+          
+          # values.yaml 파일 업데이트
+          sed -i "s|tag:.*|tag: $IMAGE_TAG|g" argocd/charts/frontend/values.yaml
+          sed -i "s|repository:.*|repository: $ECR_REGISTRY/$ECR_REPOSITORY|g" argocd/charts/frontend/values.yaml
+          
+          # 변경사항 커밋 및 푸시 (충돌 시 재시도)
+          git add argocd/charts/frontend/values.yaml
+          git commit -m "프론트엔드 이미지 업데이트: $IMAGE_TAG" || echo "No changes to commit"
+          git push || (git pull --rebase && git push)

@@ -1,7 +1,7 @@
 name: 백엔드 이미지 빌드 및 ECR 배포
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'src/**' # 백엔드 코드가 변경될 때만 실행
 env:
@@ -28,18 +28,24 @@ jobs:
       - name: ECR 로그인
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - name: Maven으로 백엔드 빌드
-        run: mvn clean package -DskipTests
       - name: 현재 시간 가져오기
         id: current-time
         run: echo "::set-output name=timestamp::$(date +'%Y%m%d%H%M%S')"
-      - name: 이미지 빌드 및 ECR 푸시
-        id: build-image
+      - name: Jib로 이미지 빌드 및 ECR 푸시
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: petclinic-backend
           IMAGE_TAG: ${{ github.sha }}
           TIMESTAMP_TAG: ${{ steps.current-time.outputs.timestamp }}
-        run: "# Dockerfile이 없으면 생성\nif [ ! -f \"Dockerfile.backend\" ]; then\n  cat > Dockerfile.backend << 'EOL'\n  FROM eclipse-temurin:17-jre-alpine\n  \n  WORKDIR /app\n  \n  COPY target/*.jar app.jar\n  \n  EXPOSE 8080\n  \n  ENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]\n  EOL\nfi\n\n# 이미지 빌드\ndocker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \\\n            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \\\n            -t $ECR_REGISTRY/$ECR_REPOSITORY:$TIMESTAMP_TAG \\\n            -f Dockerfile.backend .\n\n# ECR로 이미지 푸시\ndocker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\ndocker push $ECR_REGISTRY/$ECR_REPOSITORY:latest\ndocker push $ECR_REGISTRY/$ECR_REPOSITORY:$TIMESTAMP_TAG\n\n# 출력 설정\necho \"::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG\"\n"
+        run: |
+          # pom.xml에 명시된 이미지 레지스트리와 태그를 오버라이드
+          mvn compile jib:build \
+            -Djib.to.image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -Djib.to.tags=latest,$TIMESTAMP_TAG
+          
+          # 출력 설정
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          
       # ArgoCD 매니페스트 업데이트
       - name: Git 설정
         run: |
@@ -50,5 +56,12 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: petclinic-backend
           IMAGE_TAG: ${{ github.sha }}
-          TIMESTAMP_TAG: ${{ steps.current-time.outputs.timestamp }}
-        run: "# values.yaml 파일 업데이트 (이미지 태그만)\nsed -i \"s|tag:.*|tag: $IMAGE_TAG|g\" argocd/charts/backend/values.yaml\nsed -i \"s|repository:.*|repository: $ECR_REGISTRY/$ECR_REPOSITORY|g\" argocd/charts/backend/values.yaml\n\n# 변경사항 커밋 및 푸시\ngit add argocd/charts/backend/values.yaml\ngit commit -m \"백엔드 이미지 업데이트: $IMAGE_TAG\"\ngit push "
+        run: |
+          # values.yaml 파일 업데이트 (이미지 태그만)
+          sed -i "s|tag:.*|tag: $IMAGE_TAG|g" argocd/charts/backend/values.yaml
+          sed -i "s|repository:.*|repository: $ECR_REGISTRY/$ECR_REPOSITORY|g" argocd/charts/backend/values.yaml
+          
+          # 변경사항 커밋 및 푸시
+          git add argocd/charts/backend/values.yaml
+          git commit -m "백엔드 이미지 업데이트: $IMAGE_TAG"
+          git push

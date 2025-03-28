@@ -9,7 +9,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Maps Owner & OwnerDto using Mapstruct
+ * Maps Owner & OwnerDto using Mapstruct  
  */
 @Mapper(uses = PetMapper.class)
 public interface OwnerMapper {

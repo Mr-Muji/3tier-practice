@@ -16,7 +16,7 @@ ReactDOM.render(
   <AppContainer><Root history={history}/></AppContainer>,
   mountPoint
 );
-
+//
 declare var module: any;
 if (module.hot) {
   module.hot.accept('./Root', () => {

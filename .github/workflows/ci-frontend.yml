@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'client/**' # 프론트엔드 코드가 변경될 때만 실행
+      - '.github/workflows/ci-frontend.yml'
 env:
   AWS_REGION: ap-northeast-2 # AWS 리전을 서울로 지정
   ECR_REPOSITORY: tier3-frontend # ECR 리포지토리 이름
@@ -28,8 +29,10 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       - name: 프론트엔드 종속성 설치
         working-directory: ./client
-        run: npm install --legacy-peer-deps
-        # run: npm install --save-dev @types/jest
+        run: |
+          npm install --legacy-peer-deps
+          npm install --save-dev @types/jest
+          npm install --save-dev webpack-cli
       - name: 프론트엔드 빌드
         working-directory: ./client
         run: npm run build:prod

@@ -43,10 +43,11 @@ jobs:
       - name: S3 배포
         working-directory: ./client
         run: |
-          # build 폴더의 파일을 S3 버킷에 업로드
-          # 빌드 결과물 폴더가 'public', 'dist', 'build' 등 다를 수 있으므로 
-          # 프로젝트 구조에 맞게 수정하세요
-          aws s3 sync ./public s3://${{ env.S3_BUCKET }} --delete
+          # 정확한 빌드 결과물 폴더를 S3에 업로드
+          aws s3 sync ./public/dist s3://${{ env.S3_BUCKET }} --delete
+          
+          # index.html 파일을 S3 버킷 루트에도 복사
+          aws s3 cp ./public/index.html s3://${{ env.S3_BUCKET }}/index.html
           
           # CloudFront 캐시 무효화
           aws cloudfront create-invalidation --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"

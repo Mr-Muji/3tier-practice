@@ -102,12 +102,84 @@ jobs:
           
           echo "main.tsx 파일 내용:"
           cat src/main.tsx
+      - name: 추가 의존성 설치
+        working-directory: ./client
+        run: |
+          # react-router와 react-hot-loader 버전 맞추기
+          npm install --save react-router@2.7.0 react-hot-loader@3.0.0-beta.0 --legacy-peer-deps
+          
       - name: webpack 설정 수정
         working-directory: ./client
         run: |
-          # 백엔드 URL 수정 및 소스맵 비활성화
-          sed -i 's|devtool: .*,|devtool: false,|' webpack.config.prod.js
-          sed -i 's|__API_SERVER_URL__: JSON.stringify(.*)|__API_SERVER_URL__: JSON.stringify("https://api.mydairy.my")|' webpack.config.prod.js
+          # webpack 설정 파일 백업
+          cp webpack.config.prod.js webpack.config.prod.js.bak
+          
+          # 새로운 webpack 설정 생성
+          cat > webpack.config.prod.js << 'EOF'
+          const path = require('path');
+          const webpack = require('webpack');
+          
+          module.exports = {
+            devtool: false,
+            entry: './src/main.tsx',
+            output: {
+              path: path.join(__dirname, 'public/dist/'),
+              filename: 'bundle.js',
+              publicPath: '/dist/'
+            },
+            resolve: {
+              extensions: ['', '.webpack.js', '.web.js', '.ts', '.tsx', '.js']
+            },
+            plugins: [
+              new webpack.DefinePlugin({
+                'process.env': {
+                  'NODE_ENV': JSON.stringify('production'),
+                  '__API_SERVER_URL__': JSON.stringify('https://api.mydairy.my')
+                }
+              })
+            ],
+            module: {
+              loaders: [
+                {
+                  test: /\.less$/,
+                  loader: 'style!css!less'
+                },
+                {
+                  test: /\.css$/,
+                  loader: 'style!css'
+                },
+                {
+                  test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
+                  loader: 'url?limit=10000'
+                },
+                {
+                  test: /\.tsx?$/,
+                  loader: 'babel!ts',
+                  include: path.join(__dirname, 'src')
+                }
+              ]
+            }
+          };
+          EOF
+          
+      - name: public/index.html 수정
+        working-directory: ./client
+        run: |
+          # index.html 파일이 없으면 생성
+          mkdir -p public
+          cat > public/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>Spring Pet Clinic</title>
+            </head>
+            <body>
+              <div id="mount"></div>
+              <script src="/dist/bundle.js"></script>
+            </body>
+          </html>
+          EOF
       - name: 프론트엔드 빌드
         working-directory: ./client
         run: npm run build:prod --legacy-peer-deps

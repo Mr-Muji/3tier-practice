@@ -3,15 +3,10 @@ const webpack = require('webpack');
 
 const port = process.env.PORT || 3000;
 
-const entries = [
-  './src/main.tsx',
-  './src/index.tsx',
-  './src/app.tsx'
-];
-
+const entries = './src/main.tsx';
 
 module.exports = {
-  devtool: 'source-map',
+  devtool: false,
   entry: entries,
   output: {
     path: path.join(__dirname, 'public/dist/'),

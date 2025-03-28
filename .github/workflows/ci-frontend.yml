@@ -43,8 +43,8 @@ jobs:
       - name: S3 배포
         working-directory: ./client
         run: |
-          # 정확한 빌드 결과물 폴더를 S3에 업로드
-          aws s3 sync ./public/dist s3://${{ env.S3_BUCKET }} --delete
+          # dist 폴더 구조를 유지하면서 S3에 업로드
+          aws s3 sync ./public s3://${{ env.S3_BUCKET }} --delete
           
           # index.html 파일을 S3 버킷 루트에도 복사
           aws s3 cp ./public/index.html s3://${{ env.S3_BUCKET }}/index.html

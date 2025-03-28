@@ -1,4 +1,4 @@
-name: 프론트엔드 이미지 빌드 및 ECR 배포
+name: 프론트엔드 이미지 빌드 및 S3 배포
 on:
   push:
     branches: [main]
@@ -7,9 +7,10 @@ on:
       - '.github/workflows/ci-frontend.yml'
 env:
   AWS_REGION: ap-northeast-2 # AWS 리전을 서울로 지정
-  ECR_REPOSITORY: tier3-frontend # ECR 리포지토리 이름
+  S3_BUCKET: tier3-dev-frontend # S3 버킷 이름
+  CLOUDFRONT_DISTRIBUTION_ID: E12JSUALIP3E0Y
 jobs:
-  build-and-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: 리포지토리 체크아웃
@@ -24,64 +25,31 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: ECR 로그인
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
       - name: 프론트엔드 종속성 설치
         working-directory: ./client
         run: |
           npm install --legacy-peer-deps
-          npm install --save-dev @types/jest
-          npm install --save-dev webpack-cli
+          npm install --save-dev @types/jest --legacy-peer-deps
+          npm install --save-dev webpack-cli --legacy-peer-deps
       - name: 프론트엔드 빌드
         working-directory: ./client
-        run: npm run build:prod
-      - name: Nginx 설정 파일 생성
-        working-directory: ./client
-        run: "cat > nginx.conf << 'EOL'\nserver {\n  listen 80;\n  server_name localhost;\n  \n  location / {\n    root /usr/share/nginx/html;\n    index index.html;\n    try_files $uri $uri/ /index.html;\n  }\n  \n  # API 요청 프록시 설정 (필요한 경우)\n  location /petclinic/ {\n    proxy_pass http://backend-service:8080/petclinic/;\n    proxy_set_header Host $host;\n    proxy_set_header X-Real-IP $remote_addr;\n  }\n}\nEOL\n"
+        run: npm run build:prod --legacy-peer-deps
+      
       - name: 현재 시간 가져오기
         id: current-time
         run: echo "::set-output name=timestamp::$(date +'%Y%m%d%H%M%S')"
-      - name: 이미지 빌드 및 ECR 푸시
-        id: build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-          TIMESTAMP_TAG: ${{ steps.current-time.outputs.timestamp }}
+        
+      - name: S3 배포
+        working-directory: ./client
         run: |
-          cd ./client
-          # 이미지 빌드
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-                      -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-                      -t $ECR_REGISTRY/$ECR_REPOSITORY:$TIMESTAMP_TAG \
-                      -f ../Dockerfile.frontend .
-
-          # ECR로 이미지 푸시
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$TIMESTAMP_TAG
-
-          # 출력 설정
-          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-      # ArgoCD 매니페스트 업데이트
-      - name: Git 설정
-        run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "github-actions@github.com"
-      - name: ArgoCD 매니페스트 업데이트
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          # 최신 변경사항 가져오기
-          git pull --rebase
+          # build 폴더의 파일을 S3 버킷에 업로드
+          # 빌드 결과물 폴더가 'public', 'dist', 'build' 등 다를 수 있으므로 
+          # 프로젝트 구조에 맞게 수정하세요
+          aws s3 sync ./public s3://${{ env.S3_BUCKET }} --delete
           
-          # values.yaml 파일 업데이트
-          sed -i "s|tag:.*|tag: $IMAGE_TAG|g" argocd/charts/frontend/values.yaml
-          sed -i "s|repository:.*|repository: $ECR_REGISTRY/$ECR_REPOSITORY|g" argocd/charts/frontend/values.yaml
+          # CloudFront 캐시 무효화 (CloudFront를 사용하는 경우)
+          # CloudFront 배포 ID가 있는 경우에만 주석 해제
+          # aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
           
-          # 변경사항 커밋 및 푸시 (충돌 시 재시도)
-          git add argocd/charts/frontend/values.yaml
-          git commit -m "프론트엔드 이미지 업데이트: $IMAGE_TAG" || echo "No changes to commit"
-          git push || (git pull --rebase && git push)
+          echo "프론트엔드를 S3 버킷에 배포했습니다: ${{ env.S3_BUCKET }}"
+          echo "배포 시간: $(date +'%Y-%m-%d %H:%M:%S')"

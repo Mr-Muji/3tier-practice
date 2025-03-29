@@ -7,8 +7,8 @@ on:
       - '.github/workflows/ci-frontend.yml'
 env:
   AWS_REGION: ap-northeast-2 # AWS 리전을 서울로 지정
-  S3_BUCKET: tier3-dev-frontend # S3 버킷 이름
-  CLOUDFRONT_DISTRIBUTION_ID: E12JSUALIP3E0Y
+  S3_BUCKET: 3tier-frontend-bucket # S3 버킷 이름
+  CLOUDFRONT_DISTRIBUTION_ID: E12JSUALIP3E0Y  # CloudFront 배포 ID
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
